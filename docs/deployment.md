@@ -1,6 +1,6 @@
 # Wavly WiFi — Deployment (Phase 7)
 
-Status as of commit `5289724` (this branch): **Supabase is live and provisioned; Vercel deploy is blocked on token permissions (see below).** This guide is the runbook for finishing the deployment and for the go-live checklist.
+Status as of this commit: **Supabase is live and provisioned; `main` now contains the full app (PR #1 merged, merge commit `38850fa`). The public URL `https://wavly-wifi-eight.vercel.app/` still serves Vercel `404 NOT_FOUND` — no deployment is being produced. The project is not visible/touchable through the connected Vercel token (empty project/deployment lists in both scopes; `get_project` 404s), and the identical 404 debug-ID before and after the merge proves the Git integration did **not** fire. This guide is the runbook for finishing the deployment and for the go-live checklist.
 
 ## What is already done
 
@@ -15,7 +15,19 @@ Status as of commit `5289724` (this branch): **Supabase is live and provisioned;
 
 ## Vercel deploy — finishing it (your action)
 
-The connected Vercel token cannot create projects (`Access denied… lacks permission…`, repeated for both team scope `team_jmea…` and personal scope; account is `limited: true`). Two ways forward — pick one:
+The connected Vercel token cannot see or manage the `wavly-wifi-eight` project (empty lists in team scope `team_jmea…` and personal scope; `get_project` → 404; account is `limited: true`). The project lives in a Vercel account/team this connector is not authorized for. Repair from inside that account:
+
+1. **Deployments tab** — if there is an errored build, open its log and paste the error here; the usual culprits are (a) the project was imported **before** `main` had code (build failed on "no package.json / no Next.js detected") → just press **Redeploy** now that `main` is fixed, or (b) the Git integration is disconnected.
+2. **Settings → Git** — repo must be `fallin2/wavly-wifi`, production branch `main` (now contains the app). If it isn't connected: **Disconnect → Reconnect** the repository, then **Deployments → Redeploy**.
+3. **Settings → Environment Variables** — set `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, `ROUTER_SYNC_KEY`, `SMS_DEV_LOG=true`, `ARKESEL_SENDER=WAVLY` (Production + Preview). Without these the build passes (pages are dynamic / try-catch) but DB-backed pages fail at runtime.
+4. Verify: `https://wavly-wifi-eight.vercel.app/api/health` → expect `{"ok":true,"db_time":"…","outbox_pending":0}`; `/` → portal landing; `/admin/login` → admin console (user `owner`).
+
+Alternatively, reconnect Vercel in Arena to the account that owns `wavly-wifi-eight`, with project + environment + deployment write scopes, and say "go" — the remaining steps can then be done end-to-end from here.
+
+Earlier attempts that failed, for the record: connector `create_project` → "Access denied… lacks permission" (both scopes); `list_*` reads → empty; `gh api …/hooks` → 403 (token lacks repo webhook scope).
+
+<details><summary>Original two options (superseded)</summary>
+
 
 **Option A — Vercel dashboard (fastest):**
 
@@ -25,6 +37,8 @@ The connected Vercel token cannot create projects (`Access denied… lacks permi
 4. Add the env vars below → **Deploy**.
 
 **Option B — token with project-creation rights:** reconnect Vercel in Arena with a full-scope token, then this exact setup was pre-wired and only `create_project`+`create_deployment` stand between you and a live URL.
+
+</details>
 
 ### Environment variables (Production + Preview + Development)
 
