@@ -14,7 +14,7 @@ Built in phases; see [`docs/architecture.md`](docs/architecture.md) for the full
 | 4 | [FreeRADIUS pack](freeradius/) + [guide](docs/freeradius.md) (optional Option A) | ✅ Phase 4 |
 | 5 | [Backend](docs/backend.md) — OTP auth, plans, Paystack webhooks (idempotent), vouchers, router sync, cron | ✅ Phase 5 |
 | 6 | Portal + admin dashboard ([`app/`](app/) — buy/account/redeem + `/admin` console) | ✅ Phase 6 |
-| 7 | Deployment guide | pending Phase 7 |
+| 7 | [Deployment](docs/deployment.md) — Supabase live (ref `ddbvjikeujgezrcaorop`, eu-west-1) + Vercel runbook (token-blocked) | 🟡 Phase 7 in progress |
 | 8 | Testing checklist & rollout plan | pending Phase 8 |
 
 ## Conventions
