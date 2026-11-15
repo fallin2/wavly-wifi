@@ -2,10 +2,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function UserActions({ customerId, accountStatus, hasActiveSub }: {
+export default function UserActions({ customerId, accountStatus, hasActiveSub, role }: {
   customerId: string;
   accountStatus: string;
   hasActiveSub: boolean;
+  role: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -46,6 +47,13 @@ export default function UserActions({ customerId, accountStatus, hasActiveSub }:
       {hasActiveSub && btn('+24h', () => post('/api/admin/users/extend', { customer_id: customerId, hours: 24 }, 'Extended by 24h.'))}
       {hasActiveSub && btn('+7d', () => post('/api/admin/users/extend', { customer_id: customerId, hours: 168 }, 'Extended by 7 days.'))}
       {btn('Re-push Wi-Fi creds', () => post('/api/admin/users/resync', { customer_id: customerId }, 'Re-pushed to router.'))}
+      {(role === 'owner' || role === 'admin') && accountStatus !== 'active' && (
+        btn('Erase PII', () => {
+          if (confirm('ERASE this customer\'s personal data (Act 843)?\n\nBan + soft-delete + anonymise phone/name/email/devices. Financial records are kept. This cannot be undone.')) {
+            post('/api/admin/users/erase', { customer_id: customerId }, 'Erased + anonymised.');
+          }
+        }, true)
+      )}
       {msg && <div className="hint" style={{ marginTop: 2 }}>{msg}</div>}
     </div>
   );

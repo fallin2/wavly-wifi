@@ -15,7 +15,7 @@ Built in phases; see [`docs/architecture.md`](docs/architecture.md) for the full
 | 5 | [Backend](docs/backend.md) — OTP auth, plans, Paystack webhooks (idempotent), vouchers, router sync, cron | ✅ Phase 5 |
 | 6 | Portal + admin dashboard ([`app/`](app/) — buy/account/redeem + `/admin` console) | ✅ Phase 6 |
 | 7 | [Deployment](docs/deployment.md) — Supabase live (ref `ddbvjikeujgezrcaorop`, eu-west-1) + Vercel runbook (token-blocked) | 🟡 Phase 7 in progress |
-| 8 | Testing checklist & rollout plan | pending Phase 8 |
+| 8 | [Testing checklist & rollout plan](docs/rollout.md) | ✅ Phase 8 |
 
 ## Conventions
 

@@ -8,6 +8,8 @@ const NAV = [
   { href: '/admin/vouchers', label: 'Vouchers', icon: '▤' },
   { href: '/admin/payments', label: 'Payments & refunds', icon: ' GH¢' },
   { href: '/admin/reports', label: 'Reports', icon: '↗' },
+  { href: '/admin/settings', label: 'Settings', icon: '⚙' },
+  { href: '/admin/account', label: 'Account', icon: '○' },
 ];
 
 export default function Sidebar({ username, role }: { username: string; role: string }) {

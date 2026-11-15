@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getDb } from '@/lib/db';
 import { formatDateGhana, timeLeft, ghsFromPesewas } from '@/lib/format';
+import { getAdminSessionFromCookies } from '@/lib/sessions';
 import UserActions from './UserActions';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,9 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   const sp = await searchParams;
   const q = (sp.q ?? '').trim();
   const filter = sp.filter ?? 'all';
+
+  const admin = await getAdminSessionFromCookies();
+  const role = admin?.role ?? 'support';
 
   const sql = getDb();
   const rows = await sql`
@@ -71,7 +75,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                 ) : <span className="hint" style={{ margin: 0 }}>none</span>}
               </td>
               <td>{ghsFromPesewas(Number(r.lifetime_pesewas))}</td>
-              <td><UserActions customerId={r.id} accountStatus={r.account_status} hasActiveSub={r.active_subs > 0} /></td>
+              <td><UserActions customerId={r.id} accountStatus={r.account_status} hasActiveSub={r.active_subs > 0} role={role} /></td>
             </tr>
           ))}
           {rows.length === 0 && <tr><td colSpan={5} className="hint">No customers match.</td></tr>}
