@@ -10,7 +10,7 @@ Built in phases; see [`docs/architecture.md`](docs/architecture.md) for the full
 |---|---|---|
 | 1 | [Architecture & tech stack](docs/architecture.md) | ✅ Phase 1 |
 | 2 | [Database schema](docs/schema.md) + [`migrations/`](supabase/migrations/) | ✅ Phase 2 |
-| 3 | MikroTik RouterOS v7 configuration | pending Phase 3 |
+| 3 | [MikroTik RouterOS v7 config](mikrotik/) + [runbook](docs/mikrotik.md) | ✅ Phase 3 |
 | 4 | FreeRADIUS pack (if Option A/C chosen) | pending Phase 4 |
 | 5 | Backend (auth, plans, payments, vouchers) | pending Phase 5 |
 | 6 | Portal + admin dashboard | pending Phase 6 |
