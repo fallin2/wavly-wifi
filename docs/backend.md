@@ -29,9 +29,13 @@ Next.js (App Router, TypeScript) on Vercel; Supabase Postgres. Mobile-first JSON
 | `POST /api/admin/payments/refund` | owner/admin | Two-phase: Tx A locks the payment row, inserts a `pending` refund row and reserves the amount; Paystack is called outside any DB transaction; Tx B marks the refund `success` (+ suspends the entitlement on full refund) or rolls the reservation back exactly on failure |
 | `GET /api/admin/reports/export` | admin+support | CSV exports: `kind=revenue_daily\|payments\|customers\|vouchers` (capped at 10–20k rows) |
 | `GET /api/me/hotspot` | customer | Hotspot username/secret for the authenticated device (feeds the auto-connect form) |
+| `POST /api/admin/account/password` | admin | Change own password (min 10); invalidates all of the admin's sessions |
+| `POST /api/admin/account/totp-reset` | admin | Clear own TOTP after current-password check; next login forces re-enrollment |
+| `POST /api/admin/settings` | owner/admin | Update business settings singleton (support contacts, receipt prefix, device default, sync interval, privacy notice); audit-logged |
+| `POST /api/admin/users/erase` | owner/admin | DPA erasure: ban + soft-delete + anonymise PII; sessions/devices/hotspot creds deleted; financial records retained; router `disable` enqueued |
 | `GET /api/router/sync` | `X-Router-Key` | **Wire Format v1** claim+encode of ≤60 pending outbox ops (`FOR UPDATE SKIP LOCKED`) |
 | `POST /api/router/usage` | `X-Router-Key` | Per-session byte counters → deltas → `usage_records`, `data_bytes_used`, devices upsert, cap-crossing → `kick` |
-| `GET /api/cron/expire` | `CRON_SECRET` | Mark due subs expired, enqueue disable+kick, exactly-once "expired" SMS, hygiene deletes |
+| `GET /api/cron/expire` | `CRON_SECRET` | Mark due subs expired, enqueue disable+kick, exactly-once "expired" SMS, stale pending-payment reaper (>24 h → Paystack verify → same idempotent activation), hygiene deletes |
 | `GET /api/cron/reminders` | `CRON_SECRET` | T‑48 h + day-of expiry SMS, exactly-once via `reminder_log` |
 
 ## Router entitlement semantics

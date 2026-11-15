@@ -55,10 +55,37 @@ export async function GET(req: Request) {
     }
   }
 
-  // Hygiene: old OTPs, sessions, rate buckets.
+  // Stale pending payments (>24h): ask Paystack what actually happened. Verified success goes
+  // through the SAME idempotent money path (activateFromPayment). Best-effort — never throws.
+  const stale = await sql<{ provider_reference: string }[]>`
+    select provider_reference from public.payments
+     where status = 'pending' and created_at < now() - interval '24 hours'
+     order by created_at asc limit 10`.catch(() => []);
+  let staleVerified = 0, staleMarked = 0;
+  if (stale.length) {
+    const { verifyTransaction } = await import('@/lib/paystack');
+    const { activateFromPayment } = await import('@/lib/billing');
+    for (const p of stale) {
+      try {
+        const remote = await verifyTransaction(p.provider_reference);
+        if (remote.ok && remote.providerStatus === 'success') {
+          await activateFromPayment(p.provider_reference, remote.amountPesewas, remote.raw);
+          staleVerified++;
+        } else if (remote.ok && (remote.providerStatus === 'failed' || remote.providerStatus === 'abandoned')) {
+          const updated = await sql`update public.payments set status = ${remote.providerStatus},
+                     failure_reason = ${'provider: ' + remote.providerStatus + ' (cron reaper)'}, updated_at = now()
+                   where provider_reference = ${p.provider_reference} and status = 'pending'`;
+          staleMarked += updated.count ?? 0;
+        }
+      } catch { /* Paystack unreachable / no key — leave for the next run */ }
+    }
+  }
+
+  // Hygiene: old OTPs, sessions, rate buckets, drained outbox rows.
   await sql`delete from public.otps where created_at < now() - interval '2 days'`.catch(() => {});
   await sql`delete from public.sessions where expires_at < now() - interval '2 days'`.catch(() => {});
+  await sql`delete from public.hotspot_outbox where status = 'sent' and sent_at < now() - interval '7 days'`.catch(() => {});
   await pruneRateLimits(sql).catch(() => {});
 
-  return json({ ok: true, expired: expired.length, kicked, sms_sent: smsSent });
+  return json({ ok: true, expired: expired.length, kicked, sms_sent: smsSent, stale_payments_verified: staleVerified, stale_payments_marked: staleMarked });
 }
