@@ -1,0 +1,76 @@
+# Wavly WiFi — /etc/freeradius/3.0/sites-available/default
+# Enable: sudo ln -s /etc/freeradius/3.0/sites-available/default /etc/freeradius/3.0/sites-enabled/default
+# CHAP: the MikroTik hotspot authenticates with MS-CHAPv2/CHAP — keep the chap module in authenticate.
+
+server default {
+
+listen {
+	type = auth
+	ipaddr = *
+	port = 1812
+}
+
+listen {
+	type = acct
+	ipaddr = *
+	port = 1813
+}
+# Bind ONLY on the LAN if the box has more than one leg: ipaddr = 192.168.88.10
+
+	authorize {
+		preprocess
+		# Reject empty/malformed usernames early (filter_username is in the distro default config):
+		filter_username
+		sql
+		# pap must run after sql to compare against Cleartext-Password from the custom query:
+		pap
+	}
+
+	authenticate {
+		Auth-Type PAP {
+			pap
+		}
+		Auth-Type CHAP {
+			chap
+		}
+		Auth-Type MS-CHAP {
+			mschap
+		}
+	}
+
+	preacct {
+		preprocess
+		# Produces %{Acct-Unique-Session-Id} used by the SQL accounting queries:
+		acct_unique
+	}
+
+	accounting {
+		sql
+	}
+
+	session {
+		# Enforces Simultaneous-Use returned by authorize_check_query:
+		sql
+	}
+
+	post-auth {
+		# Record accepts/rejects to radpostauth for dispute resolution:
+		sql
+
+		Post-Auth-Type Reject {
+			# Log with reason — visible via `journalctl -u freeradius`:
+			# (commented out to avoid leaking secrets into logs; radpostauth already stores it)
+			# ok
+		}
+
+		# Send MikroTik-Group (optional, informational — profiles come from / on the router):
+		# update reply {
+		#	MikroTik-Group := "%{control:Tmp-String-0}"
+		# }
+	}
+
+	pre-proxy {
+	}
+	post-proxy {
+	}
+}
