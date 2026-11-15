@@ -35,7 +35,7 @@ export default async function PrivacyPage() {
             <li>We keep records for 24 months, then delete or anonymise them.</li>
             <li>Payments are processed by Paystack; we never see your MoMo PIN. Receipts are SMSed to your number.</li>
           </ul>
-          <p className="hint">Data controller: {settings.business_name}, Nkawie, Ghana{settings.support_phone ? ` · ${settings.support_phone}` : ''}. Registered with the Data Protection Commission of Ghana (see the deployment checklist).</p>
+          <p className="hint">Data controller: {settings.business_name}, Nkawie, Ghana{settings.support_phone ? ` · ${settings.support_phone}` : ''}. Registration with the Data Protection Commission of Ghana is a pre-launch item — see the rollout checklist. Until it completes, treat this notice as a draft to be confirmed at go-live.</p>
         </div>
       </main>
     </>

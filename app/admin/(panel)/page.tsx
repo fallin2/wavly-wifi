@@ -27,7 +27,7 @@ export default async function AdminOverview() {
         where status in ('success','partial_refund','refunded') and paid_at > now() - interval '30 days') as rev_30d,
       (select count(*)::int from public.payments where status = 'success' and (paid_at at time zone 'Africa/Accra')::date = (now() at time zone 'Africa/Accra')::date) as payments_today,
       (select count(*)::int from public.v_expiring_subscriptions) as expiring_48h,
-      (select count(*)::int from public.hotspot_outbox where processed_at is null) as open_outbox,
+      (select count(*)::int from public.hotspot_outbox where status = 'pending') as open_outbox,
       (select count(*)::int from public.payments where status = 'failed' and created_at > now() - interval '7 days') as failed_payments_7d`;
 
   const expiring = await sql`select * from public.v_expiring_subscriptions order by expires_at asc limit 12`;
