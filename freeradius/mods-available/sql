@@ -1,0 +1,141 @@
+# Wavly WiFi — /etc/freeradius/3.0/mods-available/sql
+# NOTE: In production, copy the distro-shipped rlm_sql config and apply ONLY the deltas below,
+# or drop this file in as-is — it is complete for our use. Keep queries in sync with
+# freeradius/queries/*.sql (validated against the schema in supabase/migrations).
+#
+# Install: sudo apt install freeradius freeradius-postgresql
+# Enable:  sudo ln -s /etc/freeradius/3.0/mods-available/sql /etc/freeradius/3.0/mods-enabled/sql
+
+sql {
+	driver = "rlm_sql_postgresql"
+	dialect = "postgresql"
+
+	# Supabase: connect DIRECTLY if you can (≤ a few dozen threads here), else the SESSION pooler
+	# (port 5432, aws-0-<region>.pooler.supabase.com). Do NOT use the transaction pooler (6543).
+	server = "aws-0-REGION.pooler.supabase.com"
+	port = 5432
+	login = "radius_app"                 # dedicated least-privilege role — see 0003_radius.sql notes
+	password = "PASTE_RADIUS_DB_PASSWORD"
+	database = "postgres"
+	radius_db = "postgres"
+
+	# rlm_sql_postgresql on FR ≥ 3.0.19 passes libpq options; Supabase requires TLS:
+	ssl_mode = "require"                 # if your build rejects this key, export PGSSLMODE=require instead
+
+	read_clients = yes
+	client_table = "radnas"
+
+	# We do NOT use the radcheck/radreply tables for auth — custom queries below hit the billing schema.
+	# The standard accounting queries target the standard radacct table created by 0003_radius.sql.
+
+	authorize_check_query = "\
+SELECT hc.username, 'Cleartext-Password', ':=', hc.secret \
+  FROM public.hotspot_credentials hc \
+  JOIN public.customers c ON c.id = hc.customer_id \
+ WHERE hc.username = '%{SQL-User-Name}' \
+   AND c.account_status = 'active' \
+   AND c.deleted_at IS NULL \
+   AND EXISTS ( \
+     SELECT 1 FROM public.subscriptions s \
+      WHERE s.customer_id = c.id \
+        AND s.status = 'active' \
+        AND (s.expires_at IS NULL OR s.expires_at > now()) \
+        AND (s.data_bytes_cap IS NULL OR s.data_bytes_used < s.data_bytes_cap)) \
+UNION ALL \
+SELECT hc.username, 'Simultaneous-Use', ':=', sub.device_limit::text \
+  FROM public.hotspot_credentials hc \
+  JOIN public.customers c ON c.id = hc.customer_id \
+  JOIN LATERAL ( \
+        SELECT s.device_limit FROM public.subscriptions s \
+         WHERE s.customer_id = c.id AND s.status = 'active' \
+           AND (s.expires_at IS NULL OR s.expires_at > now()) \
+           AND (s.data_bytes_cap IS NULL OR s.data_bytes_used < s.data_bytes_cap) \
+         ORDER BY s.expires_at DESC NULLS LAST LIMIT 1 \
+       ) sub ON true \
+ WHERE hc.username = '%{SQL-User-Name}' \
+   AND c.account_status = 'active' \
+   AND c.deleted_at IS NULL"
+
+	authorize_reply_query = "\
+SELECT hc.username, 'MikroTik-Rate-Limit', ':=', \
+       (p.rate_limit_up_kbps || 'k/' || p.rate_limit_down_kbps || 'k') \
+  FROM public.hotspot_credentials hc \
+  JOIN public.customers c ON c.id = hc.customer_id \
+  JOIN public.subscriptions s \
+    ON s.customer_id = c.id AND s.status = 'active' \
+   AND (s.expires_at IS NULL OR s.expires_at > now()) \
+   AND (s.data_bytes_cap IS NULL OR s.data_bytes_used < s.data_bytes_cap) \
+  JOIN public.plans p ON p.id = s.plan_id \
+ WHERE hc.username = '%{SQL-User-Name}' \
+   AND c.account_status = 'active' \
+   AND c.deleted_at IS NULL \
+   AND p.rate_limit_up_kbps IS NOT NULL AND p.rate_limit_down_kbps IS NOT NULL \
+UNION ALL \
+SELECT hc.username, 'Session-Timeout', ':=', \
+       GREATEST(60, LEAST(2147483647, floor(extract(epoch from (s.expires_at - now())))::bigint))::text \
+  FROM public.hotspot_credentials hc \
+  JOIN public.customers c ON c.id = hc.customer_id \
+  JOIN public.subscriptions s \
+    ON s.customer_id = c.id AND s.status = 'active' AND s.expires_at IS NOT NULL \
+   AND s.expires_at > now() \
+   AND (s.data_bytes_cap IS NULL OR s.data_bytes_used < s.data_bytes_cap) \
+ WHERE hc.username = '%{SQL-User-Name}' \
+   AND c.account_status = 'active' \
+   AND c.deleted_at IS NULL"
+
+	simul_count_query = "\
+SELECT COUNT(DISTINCT acctsessionid) \
+  FROM public.radacct \
+ WHERE acctstoptime IS NULL \
+   AND username = '%{SQL-User-Name}'"
+
+	# Accounting → standard radacct shape (see 0003_radius.sql for the table).
+	accounting_start_query = "\
+INSERT INTO public.radacct \
+  (acctsessionid, acctuniqueid, username, realm, nasipaddress, nasportid, nasporttype, \
+   acctstarttime, acctupdatetime, acctsessiontime, acctauthentic, \
+   connectinfo_start, acctinputoctets, acctoutputoctets, \
+   calledstationid, callingstationid, servicetype, framedprotocol, framedipaddress) \
+VALUES \
+  ('%{Acct-Session-Id}', '%{Acct-Unique-Session-Id}', '%{SQL-User-Name}', NULL, \
+   '%{NAS-IP-Address}', '%{NAS-Port-Id}', '%{NAS-Port-Type}', \
+   '%{Event-Timestamp}', '%{Event-Timestamp}', 0, 'RADIUS', \
+   '%{Connect-Info}', '%{%{Acct-Input-Gigawords}:-0}' * 4294967296 + '%{Acct-Input-Octets}', \
+   '%{%{Acct-Output-Gigawords}:-0}' * 4294967296 + '%{Acct-Output-Octets}', \
+   '%{Called-Station-Id}', '%{Calling-Station-Id}', '%{Service-Type}', '%{Framed-Protocol}', \
+   NULLIF('%{Framed-IP-Address}', '')::inet) ON CONFLICT (acctuniqueid) DO NOTHING"
+
+	accounting_update_query = "\
+UPDATE public.radacct \
+   SET acctupdatetime = '%{Event-Timestamp}', \
+       acctsessiontime = '%{Acct-Session-Time}', \
+       acctinputoctets = '%{%{Acct-Input-Gigawords}:-0}'::bigint * 4294967296 + '%{Acct-Input-Octets}'::bigint, \
+       acctoutputoctets = '%{%{Acct-Output-Gigawords}:-0}'::bigint * 4294967296 + '%{Acct-Output-Octets}'::bigint \
+ WHERE acctsessionid = '%{Acct-Session-Id}' \
+   AND nasipaddress = '%{NAS-IP-Address}' \
+   AND acctstoptime IS NULL"
+
+	accounting_stop_query = "\
+UPDATE public.radacct \
+   SET acctstoptime = '%{Event-Timestamp}', \
+       acctsessiontime = '%{Acct-Session-Time}', \
+       acctinputoctets = '%{%{Acct-Input-Gigawords}:-0}'::bigint * 4294967296 + '%{Acct-Input-Octets}'::bigint, \
+       acctoutputoctets = '%{%{Acct-Output-Gigawords}:-0}'::bigint * 4294967296 + '%{Acct-Output-Octets}'::bigint, \
+       acctterminatecause = '%{Acct-Terminate-Cause}', \
+       connectinfo_stop = '%{Connect-Info}' \
+ WHERE acctsessionid = '%{Acct-Session-Id}' \
+   AND nasipaddress = '%{NAS-IP-Address}'"
+
+	# On startup the router re-sends accounting for sessions in flight — close any orphans we missed:
+	accounting_on_query = "\
+UPDATE public.radacct \
+   SET acctstoptime = '%{Event-Timestamp}', acctterminatecause = 'Nas-Reboot' \
+ WHERE nasipaddress = '%{NAS-IP-Address}' AND acctstoptime IS NULL"
+
+	# Post-auth audit (rejections AND accepts) for dispute handling:
+	postauth_query = "\
+INSERT INTO public.radpostauth (username, pass, reply, authdate) \
+VALUES ('%{User-Name}', '%{%{User-Password}:-}', '%{reply:-}', '%{Event-Timestamp}')"
+
+	# Extra: log rejections with reason to notice stream (see log section in sites-available/default)
+}
