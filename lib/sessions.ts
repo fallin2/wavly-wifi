@@ -44,9 +44,7 @@ function extractToken(req: Request, cookieName: string): string | null {
 export const CUSTOMER_COOKIE = 'wavly_session';
 export const ADMIN_COOKIE = 'wavly_admin';
 
-export async function getCustomerSession(req: Request): Promise<CustomerSession | null> {
-  const token = extractToken(req, CUSTOMER_COOKIE);
-  if (!token) return null;
+async function findCustomerSessionByToken(token: string): Promise<CustomerSession | null> {
   const hash = crypto.createHash('sha256').update(token).digest('hex');
   const sql = getDb();
   // Ban a session if the customer was banned/deleted or the session expired — checked in one go.
@@ -65,9 +63,14 @@ export async function getCustomerSession(req: Request): Promise<CustomerSession 
   return rows[0] ?? null;
 }
 
-export async function getAdminSession(req: Request): Promise<AdminSession | null> {
-  const token = extractToken(req, ADMIN_COOKIE);
+export async function getCustomerSession(req: Request): Promise<CustomerSession | null> {
+  const token = extractToken(req, CUSTOMER_COOKIE);
   if (!token) return null;
+  return findCustomerSessionByToken(token);
+}
+
+/** For server components (no Request object): read the cookie via next/headers. */
+async function findAdminSessionByToken(token: string): Promise<AdminSession | null> {
   const hash = crypto.createHash('sha256').update(token).digest('hex');
   const sql = getDb();
   const rows = await sql<AdminSession[]>`
@@ -81,6 +84,29 @@ export async function getAdminSession(req: Request): Promise<AdminSession | null
     void sql`update public.sessions set last_seen_at = now() where token_hash = ${hash}`.catch(() => {});
   }
   return rows[0] ?? null;
+}
+
+export async function getAdminSession(req: Request): Promise<AdminSession | null> {
+  const token = extractToken(req, ADMIN_COOKIE);
+  if (!token) return null;
+  return findAdminSessionByToken(token);
+}
+
+/** For server components (no Request object): read the admin cookie via next/headers. */
+export async function getAdminSessionFromCookies(): Promise<AdminSession | null> {
+  const { cookies } = await import('next/headers');
+  const store = await cookies();
+  const token = store.get(ADMIN_COOKIE)?.value;
+  if (!token) return null;
+  return findAdminSessionByToken(token);
+}
+
+export async function getCustomerSessionFromCookies(): Promise<CustomerSession | null> {
+  const { cookies } = await import('next/headers');
+  const store = await cookies();
+  const token = store.get(CUSTOMER_COOKIE)?.value;
+  if (!token) return null;
+  return findCustomerSessionByToken(token);
 }
 
 export async function destroySession(req: Request, cookieName: string) {

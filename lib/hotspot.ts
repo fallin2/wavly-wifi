@@ -39,14 +39,16 @@ export async function enqueueOutbox(
             values (${op}, ${username}, ${sql.json(payload as any)})`;
 }
 
-/** After (re)activation: push the full credential/profile state so the router can accept logins. */
-export async function enqueueHotspotUpsert(tx: Tx | postgres.Sql<Record<string, any>>, customerId: string, profile: string, expiresAt: Date | null) {
-  const sql = tx as postgres.Sql;
+/** After (re)activation: push the full credential/profile state so the router can accept logins.
+ *  limit-uptime is sent as 0 (=no limit): RouterOS counts it CUMULATIVELY across all sessions,
+ *  which would wrongly cut off multi-session customers mid-plan. Expiry is enforced by the
+ *  /api/cron/expire kicker (and by RADIUS Session-Timeout on Option A) instead. */
+export async function enqueueHotspotUpsert(tx: Tx | postgres.Sql<Record<string, any>>, customerId: string, profile: string, _expiresAt: Date | null) {
+  const sql = tx as postgres.Sql<Record<string, any>>;
   const creds = await sql`select username, secret from public.hotspot_credentials where customer_id = ${customerId}`;
   const c = creds[0];
   if (!c) return;
-  const limitMin = expiresAt ? Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 60000)) : 0;
-  await enqueueOutbox(sql, 'upsert', c.username, { secret: c.secret, profile, limitUptimeMin: limitMin, mac: '-' });
+  await enqueueOutbox(sql, 'upsert', c.username, { secret: c.secret, profile, limitUptimeMin: 0, mac: '-' });
 }
 
 export async function enqueueKickAndDisable(sql: postgres.Sql<Record<string, any>>, username: string) {

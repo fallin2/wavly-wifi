@@ -94,6 +94,21 @@ export async function verifyTransaction(reference: string) {
   };
 }
 
+
+/** Refund a transaction (full or partial, amount in pesewas). Paystack processes asynchronously; we record the request result. */
+export async function refundTransaction(reference: string, amountPesewas?: number) {
+  const { status, body } = await paystackFetch('/refund', {
+    method: 'POST',
+    body: JSON.stringify(amountPesewas ? { transaction: reference, amount: amountPesewas } : { transaction: reference }),
+  });
+  return {
+    ok: status < 400 && body?.status === true,
+    refundId: body?.data?.id != null ? String(body.data.id) : null,
+    message: body?.message ?? null,
+    raw: body,
+  };
+}
+
 /** Paystack webhooks use the charge.success event for MoMo charges. */
 export interface ParsedPaystackEvent {
   event: string;

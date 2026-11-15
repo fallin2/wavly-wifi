@@ -13,7 +13,7 @@ Built in phases; see [`docs/architecture.md`](docs/architecture.md) for the full
 | 3 | [MikroTik RouterOS v7 config](mikrotik/) + [runbook](docs/mikrotik.md) | ✅ Phase 3 |
 | 4 | [FreeRADIUS pack](freeradius/) + [guide](docs/freeradius.md) (optional Option A) | ✅ Phase 4 |
 | 5 | [Backend](docs/backend.md) — OTP auth, plans, Paystack webhooks (idempotent), vouchers, router sync, cron | ✅ Phase 5 |
-| 6 | Portal + admin dashboard | pending Phase 6 |
+| 6 | Portal + admin dashboard ([`app/`](app/) — buy/account/redeem + `/admin` console) | ✅ Phase 6 |
 | 7 | Deployment guide | pending Phase 7 |
 | 8 | Testing checklist & rollout plan | pending Phase 8 |
 

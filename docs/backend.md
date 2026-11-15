@@ -22,10 +22,26 @@ Next.js (App Router, TypeScript) on Vercel; Supabase Postgres. Mobile-first JSON
 | `POST /api/admin/vouchers/batch` | owner/admin | Generate ≤5000 codes (WAV-XXXX-XXXX-XXXX), store sha256 + last4, **one-time CSV response**, audit-logged |
 | `GET /api/admin/vouchers` | admin+support | List vouchers (filters) + batch stats |
 | `POST /api/admin/vouchers/[id]/disable` | owner/admin | Disable an unused voucher |
+| `POST /api/admin/plans` | owner/admin | Create a plan, or update it when `id` is passed (audit-logged) |
+| `POST /api/admin/users/set-status` | owner/admin | `active` / `suspended` / `banned` + router kick/disable via outbox; reinstate re-pushes creds |
+| `POST /api/admin/users/extend` | owner/admin | Add N hours to the current active subscription (never moves money) |
+| `POST /api/admin/users/resync` | admin+support | Re-push hotspot credentials for the active subscription (support tool) |
+| `POST /api/admin/payments/refund` | owner/admin | Two-phase: Tx A locks the payment row, inserts a `pending` refund row and reserves the amount; Paystack is called outside any DB transaction; Tx B marks the refund `success` (+ suspends the entitlement on full refund) or rolls the reservation back exactly on failure |
+| `GET /api/admin/reports/export` | admin+support | CSV exports: `kind=revenue_daily\|payments\|customers\|vouchers` (capped at 10–20k rows) |
+| `GET /api/me/hotspot` | customer | Hotspot username/secret for the authenticated device (feeds the auto-connect form) |
 | `GET /api/router/sync` | `X-Router-Key` | **Wire Format v1** claim+encode of ≤60 pending outbox ops (`FOR UPDATE SKIP LOCKED`) |
 | `POST /api/router/usage` | `X-Router-Key` | Per-session byte counters → deltas → `usage_records`, `data_bytes_used`, devices upsert, cap-crossing → `kick` |
 | `GET /api/cron/expire` | `CRON_SECRET` | Mark due subs expired, enqueue disable+kick, exactly-once "expired" SMS, hygiene deletes |
 | `GET /api/cron/reminders` | `CRON_SECRET` | T‑48 h + day-of expiry SMS, exactly-once via `reminder_log` |
+
+## Router entitlement semantics
+
+`enqueueHotspotUpsert` sends `limit-uptime = 0` (no limit). RouterOS counts limit-uptime **cumulatively across all sessions** for the user, so sending hours-remaining at purchase/renewal would wrongly cut a multi-session customer off mid-plan. Time expiry is enforced instead by:
+
+- `GET /api/cron/expire` marking subscriptions `expired` and enqueuing disable+kick, and
+- RADIUS `Session-Timeout`/`WISPr-Max-Session-Time` on Option A deployments.
+
+Data caps are enforced by the `/api/router/usage` byte-counter pipeline (cap crossed → `kick` enqueued) and by RADIUS Acct on Option A.
 
 ## Environment variables
 
